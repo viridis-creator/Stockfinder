@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10243a">
+<title>StockFinder</title>
+<style>
+:root{--navy:#10243a;--blue:#1769aa;--bg:#f3f6fa;--ink:#172333;--muted:#667587;--line:#dce4ed}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:var(--navy);color:white;padding:22px 18px 18px}header h1{margin:0;font-size:25px}header p{margin:5px 0 0;color:#c8d6e4;font-size:13px}
+main{max-width:760px;margin:auto;padding:16px}.tabs{display:flex;gap:8px;margin-bottom:16px}.tabs button{flex:1;padding:12px;border:1px solid var(--line);border-radius:12px;background:white;color:var(--ink);font-weight:700}.tabs button.active{background:var(--blue);color:white;border-color:var(--blue)}
+.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 3px 12px #14283a0a}
+label{display:block;font-size:13px;font-weight:700;margin:13px 0 6px}input,select,textarea{width:100%;padding:12px;border:1px solid #cbd6e2;border-radius:10px;background:white;color:var(--ink);font:inherit}textarea{min-height:80px;resize:vertical}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.btn{border:0;border-radius:10px;padding:12px 15px;background:var(--blue);color:white;font-weight:700;font-size:15px}.btn.secondary{background:#eaf1f8;color:var(--navy)}.btn.danger{background:#a83232}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.hidden{display:none!important}.hint{color:var(--muted);font-size:12px;line-height:1.45}.searchrow{display:flex;gap:8px}.searchrow input{flex:1}.cards{display:grid;gap:12px;margin-top:14px}.product{display:grid;grid-template-columns:92px 1fr;gap:13px;align-items:center;background:white;border:1px solid var(--line);border-radius:14px;padding:10px}.product img{width:92px;height:92px;object-fit:cover;border-radius:10px;background:#edf1f5}.product h3{margin:0 0 5px;font-size:16px}.product p{margin:3px 0;color:var(--muted);font-size:13px}.product button{margin-top:7px}.empty{text-align:center;padding:28px 12px;color:var(--muted)}.preview{width:100%;max-height:220px;object-fit:contain;border:1px dashed var(--line);border-radius:12px;margin-top:10px;background:#f8fafc}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.searchrow{display:block}.searchrow button{margin-top:8px;width:100%}}
+</style>
+</head>
+<body>
+<header><h1>StockFinder</h1><p>Find and manage your product information</p></header>
+<main>
+<div class="tabs"><button id="searchTab" class="active" type="button">Search products</button><button id="addTab" type="button">+ Add product</button></div>
+<section id="searchPanel" class="panel">
+<label for="searchInput">Search by product name or code</label>
+<div class="searchrow"><input id="searchInput" placeholder="Enter product name or code"><button class="btn" id="clearSearch" type="button">Clear</button></div>
+<label for="typeFilter">Filter by material</label><select id="typeFilter"><option value="">All materials</option><option>PCU</option><option>PVC</option><option>PU</option><option>EVA</option></select>
+<div id="productList" class="cards"><div class="empty">No products saved yet. Tap “Add product” to begin.</div></div>
+</section>
+<section id="formPanel" class="panel hidden">
+<h2 id="formTitle" style="margin:0 0 4px">Add a product</h2><p class="hint">Enter the product details below. Only the product name and code are required.</p>
+<form id="productForm">
+<label for="name">Product name *</label><input id="name" required maxlength="100" placeholder="e.g. Men's casual shoe">
+<div class="grid"><div><label for="code">Product code *</label><input id="code" required maxlength="50" placeholder="e.g. SH-001"></div><div><label for="material">Material type</label><select id="material"><option value="">Choose material</option><option>PCU</option><option>PVC</option><option>PU</option><option>EVA</option></select></div></div>
+<label for="sizes">Sizes</label><input id="sizes" placeholder="e.g. 40, 41, 42, 43">
+<div class="grid"><div><label for="rmb">Purchase price (RMB ¥)</label><input id="rmb" type="number" min="0" step="0.01" placeholder="0.00"></div><div><label for="gmd">Wholesale price (GMD D)</label><input id="gmd" type="number" min="0" step="0.01" placeholder="0.00"></div></div>
+<label for="description">Description</label><textarea id="description" placeholder="Any useful product details"></textarea>
+<label for="photo">Product photograph (one photo)</label><input id="photo" type="file" accept="image/*" capture="environment"><img id="photoPreview" class="preview hidden" alt="Selected product photo">
+<div class="actions"><button class="btn" type="submit" id="saveBtn">Save product</button><button class="btn secondary" type="button" id="cancelBtn">Cancel</button></div>
+<p class="hint">Your products and photos are saved in this browser on this device. Use Export backup regularly. Clearing Safari website data may erase them.</p>
+</form>
+</section>
+<section class="panel"><div class="actions"><button class="btn secondary" id="exportBtn" type="button">Export backup</button><button class="btn secondary" id="importBtn" type="button">Import backup</button><input id="importFile" class="hidden" type="file" accept="application/json"></div><p class="hint">A backup file lets you move or restore your product records. This hosted app does not automatically sync data between devices.</p></section>
+</main>
+<script>
+(()=> {
+'use strict';
+const KEY='stockfinder_products_v1';
+let products=[], editingId=null, photoData='';
+const $=id=>document.getElementById(id);
+const fields=['name','code','material','sizes','rmb','gmd','description'];
+function load(){try{products=JSON.parse(localStorage.getItem(KEY)||'[]');if(!Array.isArray(products))products=[];}catch(e){products=[];}render();}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(products));return true;}catch(e){alert('Could not save. The photo may be too large. Try a smaller image.');return false;}}
+function money(v,currency){return v!==''&&v!=null?currency+' '+Number(v).toLocaleString(undefined,{maximumFractionDigits:2}):'Not entered';}
+function render(){
+ const q=$('searchInput').value.trim().toLowerCase(), type=$('typeFilter').value;
+ const found=products.filter(p=>(!type||p.material===type)&&(!q||p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q)));
+ $('productList').innerHTML='';
+ if(!found.length){$('productList').innerHTML='<div class="empty">'+(products.length?'No matching products found.':'No products saved yet. Tap “Add product” to begin.')+'</div>';return;}
+ found.forEach(p=>{
+  const card=document.createElement('article');card.className='product';
+  const img=document.createElement('img');img.alt=p.name;img.src=p.photo||'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100%25" height="100%25" fill="%23edf1f5"/%3E%3Ctext x="50%25" y="54%25" text-anchor="middle" font-size="12" fill="%23667587"%3ENo photo%3C/text%3E%3C/svg%3E';
+  const info=document.createElement('div');const h=document.createElement('h3');h.textContent=p.name;const meta=document.createElement('p');meta.textContent='Code: '+p.code+' · '+(p.material||'Material not set');const prices=document.createElement('p');prices.textContent='RMB: '+money(p.rmb,'¥')+' | GMD: '+money(p.gmd,'D');const size=document.createElement('p');size.textContent='Sizes: '+(p.sizes||'Not entered');
+  const edit=document.createElement('button');edit.className='btn secondary';edit.type='button';edit.textContent='View / edit';edit.addEventListener('click',()=>editProduct(p.id));
+  info.append(h,meta,prices,size,edit);card.append(img,info);$('productList').append(card);
+ });
+}
+function switchTab(which){const add=which==='add';$('searchPanel').classList.toggle('hidden',add);$('formPanel').classList.toggle('hidden',!add);$('searchTab').classList.toggle('active',!add);$('addTab').classList.toggle('active',add);}
+function resetForm(){ $('productForm').reset();photoData='';editingId=null;$('photoPreview').classList.add('hidden');$('photoPreview').src='';$('formTitle').textContent='Add a product';$('saveBtn').textContent='Save product';}
+function editProduct(id){const p=products.find(x=>x.id===id);if(!p)return;editingId=id;fields.forEach(f=>$(f).value=p[f]??'');photoData=p.photo||'';if(photoData){$('photoPreview').src=photoData;$('photoPreview').classList.remove('hidden');}else $('photoPreview').classList.add('hidden');$('formTitle').textContent='Edit product';$('saveBtn').textContent='Update product';switchTab('add');}
+$('searchTab').addEventListener('click',()=>switchTab('search'));
+$('addTab').addEventListener('click',()=>{resetForm();switchTab('add');});
+$('cancelBtn').addEventListener('click',()=>{resetForm();switchTab('search');});
+$('searchInput').addEventListener('input',render);$('typeFilter').addEventListener('change',render);
+$('clearSearch').addEventListener('click',()=>{$('searchInput').value='';$('typeFilter').value='';render();});
+$('photo').addEventListener('change',e=>{const file=e.target.files&&e.target.files[0];if(!file)return;if(!file.type.startsWith('image/')){alert('Please choose an image.');return;}const reader=new FileReader();reader.onload=()=>{const im=new Image();im.onload=()=>{const max=1000,scale=Math.min(1,max/Math.max(im.width,im.height)),canvas=document.createElement('canvas');canvas.width=Math.round(im.width*scale);canvas.height=Math.round(im.height*scale);canvas.getContext('2d').drawImage(im,0,0,canvas.width,canvas.height);photoData=canvas.toDataURL('image/jpeg',.78);$('photoPreview').src=photoData;$('photoPreview').classList.remove('hidden');};im.src=reader.result;};reader.readAsDataURL(file);});
+$('productForm').addEventListener('submit',e=>{e.preventDefault();const name=$('name').value.trim(),code=$('code').value.trim();if(!name||!code){alert('Please enter a product name and code.');return;}if(products.some(p=>p.code.toLowerCase()===code.toLowerCase()&&p.id!==editingId)){alert('That product code is already in use. Please use a unique code.');return;}const record={id:editingId||String(Date.now())};fields.forEach(f=>record[f]=$(f).value.trim());record.photo=photoData||(editingId?(products.find(p=>p.id===editingId)||{}).photo||'':'');if(editingId){products=products.map(p=>p.id===editingId?record:p);}else products.unshift(record);if(persist()){resetForm();switchTab('search');render();alert(editingId?'Product updated.':'Product saved.');}});
+$('exportBtn').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(products,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='stockfinder-backup.json';a.click();URL.revokeObjectURL(url);});
+$('importBtn').addEventListener('click',()=>$('importFile').click());
+$('importFile').addEventListener('change',e=>{const file=e.target.files&&e.target.files[0];if(!file)return;const r=new FileReader();r.onload=()=>{try{const data=JSON.parse(r.result);if(!Array.isArray(data)||!data.every(p=>p.name&&p.code&&p.id))throw new Error();if(confirm('Importing will replace the products currently saved in this browser. Continue?')){products=data;if(persist())render();}}catch(err){alert('That backup file is not valid.');}};r.readAsText(file);e.target.value='';});
+load();
+})();
+</script>
+</body></html>
